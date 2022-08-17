@@ -195,6 +195,10 @@ def bitcoin(start, end):
 
 def data_generator(start, end, timeframe, symbol):
 
+    if timeframe == 'D':
+        steps    = 3600*24
+        interval = 'D'
+
     if timeframe == 'h4':
         steps    = 3600*4
         interval = '240'
@@ -219,19 +223,23 @@ def data_generator(start, end, timeframe, symbol):
 
     df_d = df_d.reset_index(drop = True)
     df_d = df_d.iloc[:,5:11]
-    df_d['top'], df_d['bot'] = will_frac(df_d, period = 9)
-    
-    df_d['top'] = np.where(df_d['top'] == True, 1, 0)
-    df_d['bot'] = np.where(df_d['bot'] == True, 1, 0)
-
     df_d = df_d.drop(columns=['volume'])
 
-    df_d.dropna(inplace = True)
-    df_d.reset_index(inplace=True, drop=True)
+    return df_d
 
-    print(df_d)
+    # df_d['top'], df_d['bot'] = will_frac(df_d, period = 9)
+    
+    # df_d['top'] = np.where(df_d['top'] == True, 1, 0)
+    # df_d['bot'] = np.where(df_d['bot'] == True, 1, 0)
 
-    df_d.to_csv(f'/home/farzan/robot/IMS22/csv_html/{symbol}_{timeframe}.csv', index=False, sep=',')
+    # df_d = df_d.drop(columns=['volume'])
+
+    # df_d.dropna(inplace = True)
+    # df_d.reset_index(inplace=True, drop=True)
+
+    # print(df_d)
+
+    # df_d.to_csv(f'/home/farzan/robot/IMS22/csv_html/{symbol}_{timeframe}.csv', index=False, sep=',')
 
 def euro_daily():
 
@@ -265,11 +273,39 @@ def euro_h4():
 
 
 if __name__ == '__main__':
-    data_generator(1577880000, 1659484800, 'h4', 'BTCUSDT')
-    # euro_h4()
-    # euro_daily()
 
-    # sp500(1420070400, 1652832000)
-    # bitcoin_h4(1577836800, 1656633600)
-    #euro()
+    symbol     = 'BTCUSDT'
+    timeframe  = 'h4'
+    print('. . . getting daily data')
+    df = data_generator(1577880000, 1659484800, 'D', symbol)
+    df['top'], df['bot'] = will_frac(df, period = 3)
+    conditionlist = [df['top'] == True, df['bot'] == True]
+    choicelist    = [1 , -1]
+    df['fractal_d'] = np.select(conditionlist, choicelist, 0)
+    df['fractal_d'] = df['fractal_d'].shift(1)
+    df = df[['open_time', 'fractal_d']]
+
+    print('. . . getting h4 data')
+    df_h4 = data_generator(1577880000, 1659484800, 'h4', symbol)
+    df_h4['top'], df_h4['bot'] = will_frac(df_h4, period = 9)
+    conditionlist = [df_h4['top'] == True, df_h4['bot'] == True]
+    choicelist    = [1 , -1]
+    df_h4['fractal_h4'] = np.select(conditionlist, choicelist, 0)
+    df_h4['fractal_h4'] = df_h4['fractal_h4']
+    df_h4.drop(columns=['top', 'bot'], inplace = True)
+
+    df_h4['top'], df_h4['bot'] = will_frac(df_h4, period = 6)
+    conditionlist = [df_h4['top'] == True, df_h4['bot'] == True]
+    choicelist    = [1 , -1]
+    df_h4['fractal3_h4'] = np.select(conditionlist, choicelist, 0)
+    df_h4['fractal3_h4'] = df_h4['fractal3_h4']
+    df_h4.drop(columns=['top', 'bot'], inplace = True)
+
+    final = pd.merge(df_h4, df, on = 'open_time', how = 'left')
+    final.fillna(0, inplace=True)
+    final.dropna(inplace = True)
+    final.reset_index(inplace=True, drop=True)
+
+    print('. . . saving to csv')
+    final.to_csv(f'/home/farzan/robot/IMS22/csv_html/{symbol}_{timeframe}.csv', index=False, sep=',')
 

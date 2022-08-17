@@ -79,20 +79,20 @@ def backtest():
     GammaCSV_DIR = os.path.join(BASE_DIR, "BTCUSDT_h4.csv")
     plot_DIR     = os.path.join(BASE_DIR, "BTCUSDT_h4.html")
 
-    bokehPlot   = False
+    bokehPlot   = True
     matPlotLib  = False
-    printlog    = False
-    cash        = 100000
+    printlog    = True
+    cash        = 20000
     commission  = 0.0004
     size        = (False  ,1)
-    percent     = (True , 95)
+    percent     = (False , 50)
     whole_time  = True
     from_time   = datetime.datetime.strptime('2020-09-28 00:00:00', '%Y-%m-%d %H:%M:%S')                                      
     to_time     = datetime.datetime.strptime('2022-07-20 10:00:00', '%Y-%m-%d %H:%M:%S')
 
 
     class GenericCSV_IDF22(bt.feeds.GenericCSVData):
-        lines  = ('top', 'bot')
+        lines  = ('fractal_h4', 'fractal3_h4', 'fractal_d')
         params =(   ('open_time'    , 0),
                     ('open'         , 1),
                     ('high'         , 2),
@@ -100,8 +100,9 @@ def backtest():
                     ('close'        , 4),
                     ('volume'       ,-1),
                     ('openinterest' ,-1),
-                    ('top'          , 5),
-                    ('bot'          , 6),
+                    ('fractal_h4'   , 5),
+                    ('fractal3_h4'  , 6),
+                    ('fractal_d'    , 7),
                     )
 
 
@@ -114,7 +115,7 @@ def backtest():
                     ('tenkan_period'   , 20),
                     ('kijun_period'    , 60),
                     ('senkou_period'   , 120),
-                    ('shift_period'    , 29),
+                    ('shift_period'    , 30),
                     ('kumo_trail'      , 1.5),
                     )
 
@@ -138,8 +139,9 @@ def backtest():
             self.low_d      = self.datas[1].low
             self.clos_d     = self.datas[1].close
 
-            self.top = self.datas[0].top
-            self.bot = self.datas[0].bot
+            self.fractal_h4  = self.datas[0].fractal_h4
+            self.fractal3_h4 = self.datas[0].fractal3_h4
+            self.fractal_d   = self.datas[0].fractal_d
 
             #h4_ichi
             self.ichi                 = bt.ind.Ichimoku(
@@ -164,7 +166,7 @@ def backtest():
             self.ichi_daily           = bt.ind.Ichimoku(
                                                         self.datas[1],
                                                         tenkan      = 10,
-                                                        kijun       = 34,
+                                                        kijun       = 30,
                                                         senkou      = 55,
                                                         senkou_lead = 30,
                                                         chikou      = 30,
@@ -173,7 +175,8 @@ def backtest():
             self.exit_dly = bt.ind.CrossOver(self.clos, self.ichi_daily.kijun_sen)
 
             #indicators
-            self.atr   = bt.ind.ATR(self.datas[0], period = self.p.atr_period)
+            self.atr     = bt.ind.ATR(self.datas[0], period = self.p.atr_period)
+            self.atr_d   = bt.ind.ATR(self.datas[1], period = self.p.atr_period)
             #self.adx   = bt.ind.AverageDirectionalMovementIndex(self.datas[0], period = self.p.adx_period)
 
             self.order = None
@@ -189,7 +192,6 @@ def backtest():
 
             self.one_hund_stop    = []
             self.fifty_stop       = [] 
-            self.kijun_dist_stop  = []
 
             self.exit    = []
             self.pnl_100 = []
@@ -198,11 +200,11 @@ def backtest():
             self.top_list = []
             self.bot_list = []
 
-            self.higher_low = []
-            self.lower_high = []
+            self.top3_list = []
+            self.bot3_list = []
 
-            self.stoploss_list = []
-
+            self.res = []
+            self.sup = []
 
 
         def cancel_open_orders(self):
@@ -245,15 +247,7 @@ def backtest():
 
             self.order = None
 
-
-
         def notify_trade(self, trade):
-
-            # if trade.isopen:
-            #     print(trade.pnl)
-            #     if self.getposition(self.data).size > 0 and trade.pnl > self.min_pnl:
-            #         self.cancel_open_orders()
-            #         updated_stop = self.sell()
 
 
             if trade.isclosed:
@@ -268,14 +262,11 @@ def backtest():
 
                 self.one_hund_stop   = []
                 self.fifty_stop      = []
-                self.kijun_dist_stop = []
 
                 self.exit    = []
                 self.pnl_100 = []
                 self.pnl_50  = []
 
-                self.higher_low = []
-                self.lower_high = []
 
 
                 txt = 'TRADE PNL        Gross {}, Net {}'.format(
@@ -285,13 +276,44 @@ def backtest():
 
 
         def next(self):
+            
+            size_ = 10000/self.clos
 
-            if self.top == 1:
-                self.top_list.append(self.high)
+            if len(self.res) == 0:
+                self.res.append(100000)
 
-            if self.bot == 1:
-                self.bot_list.append(self.low)
+            if len(self.sup) == 0:
+                self.sup.append(10000)
 
+            if self.fractal_d == 1:
+                self.res.append(self.high_d[0])
+
+            if self.fractal_d == -1:
+                self.sup.append(self.low_d[0])
+
+            if len(self.top_list) == 0:
+                self.top_list.append(100000)
+
+            if len(self.bot_list) == 0:
+                self.bot_list.append(10000)
+
+            if self.fractal_h4 == 1:
+                self.top_list.append(self.high[0])
+
+            if self.fractal_h4 == -1:
+                self.bot_list.append(self.low[0])
+
+            if len(self.top3_list) == 0:
+                self.top3_list.append(100000)
+
+            if len(self.bot3_list) == 0:
+                self.bot3_list.append(10000)
+
+            if self.fractal3_h4 == 1:
+                self.top3_list.append(self.high[0])
+
+            if self.fractal3_h4 == -1:
+                self.bot3_list.append(self.low[0])
 
             #pnl exit
             if (self.getposition(self.data).size > 0):
@@ -302,13 +324,12 @@ def backtest():
                     self.pnl_50.append(pnl)
 
                 
-                if (self.clos - self.ichi.kijun_sen) > 4*self.atr or (self.clos - self.ichi.tenkan_sen) > 3*self.atr and ((self.ichi.kijun_sen - 0.5*self.atr) > self.long_stop[0]):
+                if (self.clos - self.ichi.kijun_sen) > 4*self.atr or (self.clos - self.ichi.tenkan_sen) > 3*self.atr and ((self.ichi.kijun_sen - 1*self.atr) > self.long_stop[-1]):
                     self.cancel_open_orders()
                     self.long_stop = []
-                    self.close(price = self.ichi.kijun_sen - 0.5*self.atr, exectype = bt.Order.Stop)
-                    self.long_stop.append(self.ichi.kijun_sen - 0.5*self.atr)
-                    
-                    print(bt.num2date(self.datas[0].datetime[0]), '4 atr distance stop below kijun', self.ichi.kijun_sen - 0.5*self.atr)
+                    self.close(price = self.ichi.kijun_sen - 1*self.atr, exectype = bt.Order.Stop)
+                    self.long_stop.append(self.ichi.kijun_sen[0] - 1*self.atr[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), '4 atr distance stop below kijun', self.ichi.kijun_sen - 1*self.atr)
 
 
                 if len(self.pnl_100) != 0 and (self.clos < (self.ichi.tenkan_sen - 1*self.atr)):
@@ -323,12 +344,12 @@ def backtest():
                     print(bt.num2date(self.datas[0].datetime[0]), 'updating stoploss 50%', 'price:', fifty_stop.price)
                     return
 
-                if self.bot == 1 and ((self.low - 1*self.atr) > self.long_stop[0]):
+                if self.fractal_h4 == -1 and ((self.bot_list[-1] - 1*self.atr) > self.long_stop[-1]):
                     self.cancel_open_orders()
                     self.long_stop = []
-                    self.close(price = self.low - 1*self.atr, exectype = bt.Order.Stop)
-                    self.long_stop.append(self.low - 1*self.atr)
-                    print(bt.num2date(self.datas[0].datetime[0]), 'fractal stoploss placed@', self.low - 1*self.atr)
+                    self.close(price = self.bot_list[-1] - 1*self.atr, exectype = bt.Order.Stop)
+                    self.long_stop.append(self.bot_list[-1] - 1*self.atr)
+                    print(bt.num2date(self.datas[0].datetime[0]), 'fractal stoploss placed@', self.bot_list[-1] - 1*self.atr)
 
 
             if (self.getposition(self.data).size < 0):
@@ -338,12 +359,13 @@ def backtest():
                 if pnl > 0.5 and len(self.pnl_50) == 0:
                     self.pnl_50.append(pnl)
 
-                if (self.ichi.kijun_sen - self.clos) > 4*self.atr or (self.ichi.tenkan_sen - self.clos) > 3*self.atr and (self.ichi.kijun_sen + 0.5*self.atr) < self.short_stop[0]:
+                if (self.ichi.kijun_sen - self.clos) > 4*self.atr or (self.ichi.tenkan_sen - self.clos) > 3*self.atr and (self.ichi.kijun_sen + 1*self.atr) < self.short_stop[-1]:
                     self.cancel_open_orders()
                     self.short_stop = []
-                    self.close(price = self.ichi.kijun_sen + 0.5*self.atr, exectype = bt.Order.Stop)
-                    self.short_stop.append(self.ichi.kijun_sen + 0.5*self.atr)
-                    print(bt.num2date(self.datas[0].datetime[0]), '4 atr distance stop above kijun', self.ichi.kijun_sen + 0.5*self.atr)
+                    self.close(price = self.ichi.kijun_sen + 1*self.atr, exectype = bt.Order.Stop)
+                    self.short_stop.append(self.ichi.kijun_sen[0] + 1*self.atr[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), '4 atr distance stop above kijun', self.ichi.kijun_sen + 1*self.atr)
+    
 
                 if len(self.pnl_100) != 0 and (self.clos > (self.ichi.tenkan_sen + 1*self.atr)):
                     self.cancel_open_orders()
@@ -357,34 +379,72 @@ def backtest():
                     print(bt.num2date(self.datas[0].datetime[0]), 'updating stoploss 50%', 'price:', fifty_stop.price)
                     return
 
-                if self.top == 1 and (self.high + 1*self.atr) < self.short_stop[0]:
+                if self.fractal_h4 == 1 and ((self.top_list[-1] + 1*self.atr) < self.short_stop[-1]):
                     self.cancel_open_orders()
-                    self.close(price = self.high + 1*self.atr, exectype = bt.Order.Stop)
-                    print(bt.num2date(self.datas[0].datetime[0]), 'fractal stoploss placed@', self.high + 1*self.atr)
+                    self.short_stop = []
+                    self.close(price = self.top_list[-1] + 1*self.atr, exectype = bt.Order.Stop)
+                    self.short_stop.append(self.top_list[-1] + 1*self.atr)
+                    print(bt.num2date(self.datas[0].datetime[0]), 'fractal stoploss placed@', self.top_list[-1] + 1*self.atr)
+
+            #fractal3
+            if self.getposition(self.data).size > 0 and ((self.clos - self.getposition(self.data).price) <= self.min_dist[0]) and  ((self.bot3_list[-1] - 1*self.atr) > self.long_stop[-1]): 
+                self.long_stop = []
+                self.cancel_open_orders()
+                new_stop = self.close(price = self.bot3_list[-1] - 1*self.atr, exectype = bt.Order.Stop)
+                self.long_stop.append(self.bot3_list[-1] - 1*self.atr)
+
+                print(bt.num2date(self.datas[0].datetime[0]), 'below fractal6 updating stoploss', 'price:', self.bot3_list[-1] - 1*self.atr)
+
+            if self.getposition(self.data).size > 0 and ((self.clos - self.getposition(self.data).price) <= self.min_dist[0]) and  ((self.sup[-1] - 1*self.atr) > self.long_stop[-1]): 
+                self.long_stop = []
+                self.cancel_open_orders()
+                new_stop = self.close(price = self.sup[-1] - 1*self.atr, exectype = bt.Order.Stop)
+                self.long_stop.append(self.sup[-1] - 1*self.atr)
+
+                print(bt.num2date(self.datas[0].datetime[0]), 'fractal3 daily updating stoploss', 'price:', self.sup[-1] - 1*self.atr)
+
+
+            if self.getposition(self.data).size < 0 and ((self.getposition(self.data).price - self.clos) <= self.min_dist[0]) and  ((self.top3_list[-1] + 1*self.atr) < self.short_stop[-1]): 
+                self.long_stop = []
+                self.cancel_open_orders()
+                new_stop = self.close(price = self.top3_list[-1] + 1*self.atr, exectype = bt.Order.Stop)
+                self.long_stop.append(self.top3_list[-1] + 1*self.atr)
+
+                print(bt.num2date(self.datas[0].datetime[0]), 'above fractal6 updating stoploss', 'price:', self.top3_list[-1] + 1*self.atr)
+
+            if self.getposition(self.data).size < 0 and ((self.getposition(self.data).price - self.clos) <= self.min_dist[0]) and  ((self.res[-1] + 1*self.atr) < self.short_stop[-1]): 
+                self.long_stop = []
+                self.cancel_open_orders()
+                new_stop = self.close(price = self.res[-1] + 1*self.atr, exectype = bt.Order.Stop)
+                self.long_stop.append(self.res[-1] + 1*self.atr)
+
+                print(bt.num2date(self.datas[0].datetime[0]), 'fractal3 daily updating stoploss', 'price:', self.res[-1] + 1*self.atr)
+
+
 
 
             #updating stoploss 
-            if self.getposition(self.data).size > 0 and (len(self.min_dist) != 0):
-                if (self.clos - self.getposition(self.data).price) > self.min_dist[0]:
-                    self.min_dist = []
-                    self.long_stop = []
-                    self.cancel_open_orders()
-                    new_stop = self.close(price = self.new_stoploss[0], exectype = bt.Order.Stop)
-                    self.long_stop.append(self.new_stoploss[0])
+            # if self.getposition(self.data).size > 0 and (len(self.min_dist) != 0):
+            #     if (self.clos - self.getposition(self.data).price) >= self.min_dist[0]:
+            #         self.min_dist = []
+            #         self.long_stop = []
+            #         self.cancel_open_orders()
+            #         new_stop = self.close(price = self.new_stoploss[0], exectype = bt.Order.Stop)
+            #         self.long_stop.append(self.new_stoploss[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'updating stoploss', 'price:', self.new_stoploss[0])
-                    self.new_stoploss = []
+            #         print(bt.num2date(self.datas[0].datetime[0]), 'updating stoploss', 'price:', self.new_stoploss[0])
+            #         self.new_stoploss = []
 
-            if self.getposition(self.data).size < 0 and (len(self.min_dist) != 0):
-                if (self.getposition(self.data).price - self.clos) > self.min_dist[0]:
-                    self.min_dist = []
-                    self.short_stop = []
-                    self.cancel_open_orders()
-                    new_stop = self.close(price = self.new_stoploss[0], exectype = bt.Order.Stop)
-                    self.short_stop.append(self.new_stoploss[0])
+            # if self.getposition(self.data).size < 0 and (len(self.min_dist) != 0):
+            #     if (self.getposition(self.data).price - self.clos) > self.min_dist[0]:
+            #         self.min_dist = []
+            #         self.short_stop = []
+            #         self.cancel_open_orders()
+            #         new_stop = self.close(price = self.new_stoploss[0], exectype = bt.Order.Stop)
+            #         self.short_stop.append(self.new_stoploss[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'updating stoploss', 'price:', self.new_stoploss[0])
-                    self.new_stoploss = []
+            #         print(bt.num2date(self.datas[0].datetime[0]), 'updating stoploss', 'price:', self.new_stoploss[0])
+            #         self.new_stoploss = []
 
 
             #open orders check
@@ -401,6 +461,9 @@ def backtest():
                 else: 
                     self.cancel_open_orders()
                     self.buy_list = []
+                    self.new_stoploss = []
+                    self.min_dist = []
+                    self.long_stop = []
 
                     print(bt.num2date(self.datas[0].datetime[0]), 'precondition changed, cancel open order')
 
@@ -410,6 +473,9 @@ def backtest():
                 else: 
                     self.cancel_open_orders()
                     self.sell_list = []
+                    self.new_stoploss = []
+                    self.min_dist = []
+                    self.long_stop = []
 
                     print(bt.num2date(self.datas[0].datetime[0]), 'precondition changed, cancel open order')
 
@@ -422,27 +488,68 @@ def backtest():
             if self.order:
                 return
 
+            if (self.getposition(self.data).size == 0) and len(self.buy_list) == 0 and (b1 or b2) and (self.clos_d[-1] < self.res[-1] and self.clos_d[0] > self.res[-1]):
+                self.min_dist = []
+                self.new_stoploss = []
+                self.cancel_open_orders()
+                entry_price = self.high_d[0] + 0.5*self.atr_d[0]
+                buy  = self.buy(price = entry_price, size = size_, exectype = bt.Order.Stop, transmit=False)
+                if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
+                    stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit=True)
+                else:
+                    stop = self.sell(price = self.ichi.kijun_sen - 1*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit=True)
+
+                self.buy_list.append(buy)
+                self.long_stop.append(stop.price)
+                self.min_dist.append(buy.price - stop.price)
+                self.new_stoploss.append(self.high[0])
+
+                print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/buy.price)
+                print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:long breakout signal: clos/fractal_daily')
+
+                return
+
+            if (self.getposition(self.data).size == 0) and len(self.sell_list) == 0 and (s1 or s2) and (self.clos_d[-1] > self.sup[-1] and self.clos_d[0] < self.sup[-1]):
+                self.min_dist = []
+                self.new_stoploss = []
+                self.cancel_open_orders()
+                entry_price = self.low_d[0] - 0.5*self.atr_d[0]
+                sell = self.sell(price = entry_price, size = size_, exectype = bt.Order.Stop, transmit=False)
+                if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
+                    stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                else: 
+                    stop = self.buy(price = self.ichi.kijun_sen + 1*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                
+                self.sell_list.append(sell)
+                self.short_stop.append(stop.price)
+                self.min_dist.append(stop.price - sell.price)
+                self.new_stoploss.append(self.low[0])
+
+                print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/sell.price)
+                print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:short breakout signal: clos/fractal_daily')
+
+                return
+
 
             entry_price = self.high + self.p.h4_entry*self.atr
-            #H4 signal
-            if (self.getposition(self.data).size == 0) and (self.clos > self.ichi_daily.kijun_sen) and len(self.buy_list) == 0 and (self.atr/self.atr[-1] < 1.5):
+            if (self.getposition(self.data).size == 0) and (self.clos > self.ichi_daily.kijun_sen) and len(self.buy_list) == 0 and (self.atr/self.atr[-1] < 1.5) and ((self.res[-1] - self.clos) > 1*self.atr or (self.res[-1] - self.clos) < 0):
                 #h4 long
                 if (self.clos > self.ichi.senkou_span_a) and (self.clos > self.ichi.senkou_span_b) and (self.clos > self.high[-(self.p.shift_period - 1)]) and (self.ichi.tenkan_sen >= self.ichi.kijun_sen) and (self.ichi.kijun_sen >= np.where(self.ichi.senkou_span_a < self.ichi.senkou_span_b, self.ichi.senkou_span_a, self.ichi.senkou_span_b)[0]) and (self.clos >= self.ichi.tenkan_sen) and (self.cross_clos_kijun == +1):
                     self.min_dist = []
                     self.new_stoploss = []
                     self.cancel_open_orders()
-                    buy  = self.buy(price = self.high + self.p.h4_entry*self.atr, exectype = bt.Order.Stop, transmit=False)
+                    buy  = self.buy(price = self.high + self.p.h4_entry*self.atr, size = size_, exectype = bt.Order.Stop, transmit=False)
                     if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
-                        stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, exectype = bt.Order.Stop, parent = buy, transmit=True)
+                        stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit=True)
                     else:
-                        stop = self.sell(price = self.low - 1*self.atr, exectype = bt.Order.Stop, parent = buy, transmit=True)
+                        stop = self.sell(price = self.low - 1*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit=True)
 
                     self.buy_list.append(buy)
                     self.long_stop.append(stop.price)
                     self.min_dist.append(buy.price - stop.price)
                     self.new_stoploss.append(self.high[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss amount on 1 BTC:', self.min_dist[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/buy.price)
                     print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:long signal: clos/kijun')
 
                     return
@@ -451,19 +558,19 @@ def backtest():
                     self.min_dist = []
                     self.new_stoploss = []
                     self.cancel_open_orders()
-                    buy  = self.buy(price = self.high + self.p.h4_entry*self.atr, exectype = bt.Order.Stop, transmit = False)
+                    buy  = self.buy(price = self.high + self.p.h4_entry*self.atr, size = size_, exectype = bt.Order.Stop, transmit = False)
                     a = np.where(self.ichi.senkou_span_a > self.ichi.senkou_span_b, self.ichi.senkou_span_a, self.ichi.senkou_span_b)
                     if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
-                        stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, exectype = bt.Order.Stop, parent = buy, transmit=True)
+                        stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit=True)
                     else:
-                        stop = self.sell(price = self.ichi.kijun_sen - 1*self.atr, exectype = bt.Order.Stop, parent = buy, transmit=True)
+                        stop = self.sell(price = self.ichi.kijun_sen - 1*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit=True)
                     
                     self.buy_list.append(buy)
                     self.long_stop.append(stop.price)
                     self.min_dist.append(buy.price - stop.price)
                     self.new_stoploss.append(self.high[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss amount on 1 BTC:', self.min_dist[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/buy.price)
                     print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:long signal: high/chikou')
 
                     return
@@ -472,18 +579,18 @@ def backtest():
                     self.min_dist = []
                     self.new_stoploss = []
                     self.cancel_open_orders()
-                    buy  = self.buy(price = self.high + self.p.h4_entry*self.atr, exectype = bt.Order.Stop, transmit = False)
+                    buy  = self.buy(price = self.high + self.p.h4_entry*self.atr, size = size_, exectype = bt.Order.Stop, transmit = False)
                     if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
-                        stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, exectype = bt.Order.Stop, parent = buy, transmit=True)
+                        stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit=True)
                     else:
-                        stop = self.sell(price = self.ichi.kijun_sen  - self.p.h4_stop*self.atr, exectype = bt.Order.Stop, parent = buy, transmit = True)
+                        stop = self.sell(price = self.ichi.kijun_sen  - self.p.h4_stop*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit = True)
                     
                     self.buy_list.append(buy)
                     self.long_stop.append(stop.price)
                     self.min_dist.append(buy.price - stop.price)
-                    self.new_stoploss.append(buy.price)
+                    self.new_stoploss.append(self.high[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss amount on 1 BTC:', self.min_dist[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/buy.price)
                     print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:long signal: tenkan/kijun')
 
                     return
@@ -492,18 +599,18 @@ def backtest():
                     self.min_dist = []
                     self.new_stoploss = []
                     self.cancel_open_orders()
-                    buy  = self.buy(price = self.high + self.p.h4_entry*self.atr, exectype = bt.Order.Stop, transmit = False)
+                    buy  = self.buy(price = self.high + self.p.h4_entry*self.atr, size = size_, exectype = bt.Order.Stop, transmit = False)
                     if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
-                        stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, exectype = bt.Order.Stop, parent = buy, transmit=True)
+                        stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit=True)
                     else:
-                        stop = self.sell(price = self.low - 1*self.atr, exectype = bt.Order.Stop, parent = buy, transmit = True)
+                        stop = self.sell(price = self.low - 1*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit = True)
                     
                     self.buy_list.append(buy)
                     self.long_stop.append(stop.price)
                     self.min_dist.append(buy.price - stop.price)
-                    self.new_stoploss.append(buy.price)
+                    self.new_stoploss.append(self.high[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss amount on 1 BTC:', self.min_dist[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/buy.price)
                     print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:long signal: clos/kumo')
 
                     return
@@ -512,18 +619,20 @@ def backtest():
                     self.min_dist = []
                     self.new_stoploss = []
                     self.cancel_open_orders()
-                    buy  = self.buy(price = self.high + self.p.h4_entry*self.atr, exectype = bt.Order.Stop, transmit = False)
+                    print(self.ichi.kijun_sen[0])
+                    print(self.ichi.senkou_span_a[0])
+                    buy  = self.buy(price = self.high + self.p.h4_entry*self.atr, size = size_, exectype = bt.Order.Stop, transmit = False)
                     if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
-                        stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, exectype = bt.Order.Stop, parent = buy, transmit=True)
+                        stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit=True)
                     else:
-                        stop = self.sell(price = self.low - 1*self.atr, exectype = bt.Order.Stop, parent = buy, transmit = True)
+                        stop = self.sell(price = self.low - 1*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit = True)
                     
                     self.buy_list.append(buy)
                     self.long_stop.append(stop.price)
                     self.min_dist.append(buy.price - stop.price)
-                    self.new_stoploss.append(buy.price)
+                    self.new_stoploss.append(self.high[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss amount on 1 BTC:', self.min_dist[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/buy.price)
                     print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:long signal: clos/kumo')
 
                     return
@@ -532,42 +641,42 @@ def backtest():
                     self.min_dist = []
                     self.new_stoploss = []
                     self.cancel_open_orders()
-                    buy  = self.buy(price = self.high + self.p.h4_entry*self.atr, exectype = bt.Order.Stop, transmit = False)
+                    buy  = self.buy(price = self.high + self.p.h4_entry*self.atr, size = size_, exectype = bt.Order.Stop, transmit = False)
                     if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
-                        stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, exectype = bt.Order.Stop, parent = buy, transmit=True)
+                        stop = self.sell(price = self.ichi.tenkan_sen - 1*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit=True)
                     else:
-                        stop = self.sell(price = self.ichi.kijun_sen - self.p.h4_stop*self.atr, exectype = bt.Order.Stop, parent = buy, transmit = True)
+                        stop = self.sell(price = self.ichi.kijun_sen - self.p.h4_stop*self.atr, size = buy.size, exectype = bt.Order.Stop, parent = buy, transmit = True)
                     
                     self.buy_list.append(buy)
                     self.long_stop.append(stop.price)
                     self.min_dist.append(buy.price - stop.price)
-                    self.new_stoploss.append(buy.price)
+                    self.new_stoploss.append(self.high[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss amount on 1 BTC:', self.min_dist[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/buy.price)
                     print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:long signal: kijun/kumo')
 
                     return
 
 
             entry_price = self.low - self.p.h4_entry*self.atr
-            if (self.getposition(self.data).size == 0) and (self.clos < self.ichi_daily.kijun_sen) and len(self.sell_list) == 0 and (self.atr/self.atr[-1] < 1.5):
+            if (self.getposition(self.data).size == 0) and (self.clos < self.ichi_daily.kijun_sen) and len(self.sell_list) == 0 and (self.atr/self.atr[-1] < 1.5) and ((self.clos - self.sup[-1]) > 1*self.atr and (self.clos - self.sup[-1]) < 0):
                 #h4 short
                 if (self.clos < self.ichi.senkou_span_a) and (self.clos < self.ichi.senkou_span_b) and (self.clos < self.low[-(self.p.shift_period - 1)]) and (self.ichi.tenkan_sen <= self.ichi.kijun_sen) and (self.ichi.kijun_sen <= np.where(self.ichi.senkou_span_a > self.ichi.senkou_span_b, self.ichi.senkou_span_a, self.ichi.senkou_span_b)[0]) and (self.clos <= self.ichi.tenkan_sen) and (self.cross_clos_kijun == -1):
                     self.min_dist = []
                     self.new_stoploss = []
                     self.cancel_open_orders()
-                    sell = self.sell(price = self.low - self.p.h4_entry*self.atr, exectype = bt.Order.Stop, transmit=False)
+                    sell = self.sell(price = self.low - self.p.h4_entry*self.atr, size = size_, exectype = bt.Order.Stop, transmit=False)
                     if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
-                        stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                        stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
                     else:
-                        stop = self.buy(price = self.high + 1*self.atr, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                        stop = self.buy(price = self.high + 1*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
                     
                     self.sell_list.append(sell)
                     self.short_stop.append(stop.price)
                     self.min_dist.append(stop.price - sell.price)
-                    self.new_stoploss.append(sell.price)
+                    self.new_stoploss.append(self.low[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss amount on 1 BTC:', self.min_dist[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/sell.price)
                     print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:short signal: clos/kijun')
 
                     return
@@ -576,18 +685,18 @@ def backtest():
                     self.min_dist = []
                     self.new_stoploss = []
                     self.cancel_open_orders()
-                    sell = self.sell(price = self.low - self.p.h4_entry*self.atr, exectype = bt.Order.Stop, transmit=False)
+                    sell = self.sell(price = self.low - self.p.h4_entry*self.atr, size = size_, exectype = bt.Order.Stop, transmit=False)
                     if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
-                        stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                        stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
                     else:
-                        stop = self.buy(price = self.ichi.kijun_sen + 1*self.atr, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                        stop = self.buy(price = self.ichi.kijun_sen + 1*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
                     
                     self.sell_list.append(sell)
                     self.short_stop.append(stop.price)
                     self.min_dist.append(stop.price - sell.price)
                     self.new_stoploss.append(self.low[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss amount on 1 BTC:', self.min_dist[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/sell.price)
                     print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:short signal: low/chikou')
 
                     return
@@ -596,18 +705,18 @@ def backtest():
                     self.min_dist = []
                     self.new_stoploss = []
                     self.cancel_open_orders()
-                    sell = self.sell(price = self.low - self.p.h4_entry*self.atr, exectype = bt.Order.Stop, transmit=False)
+                    sell = self.sell(price = self.low - self.p.h4_entry*self.atr, size = size_, exectype = bt.Order.Stop, transmit=False)
                     if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
-                        stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                        stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
                     else:
-                        stop = self.buy(price = self.ichi.kijun_sen + self.p.h4_stop*self.atr, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                        stop = self.buy(price = self.ichi.kijun_sen + self.p.h4_stop*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
                     
                     self.sell_list.append(sell)
                     self.short_stop.append(stop.price)
                     self.min_dist.append(stop.price - sell.price)
-                    self.new_stoploss.append(sell.price)
+                    self.new_stoploss.append(self.low[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss amount on 1 BTC:', self.min_dist[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/sell.price)
                     print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:short signal: tenkan/kijun')
 
                     return
@@ -616,18 +725,18 @@ def backtest():
                     self.min_dist = []
                     self.new_stoploss = []
                     self.cancel_open_orders()
-                    sell = self.sell(price = self.low - self.p.h4_entry*self.atr, exectype = bt.Order.Stop, transmit=False)
+                    sell = self.sell(price = self.low - self.p.h4_entry*self.atr, size = size_, exectype = bt.Order.Stop, transmit=False)
                     if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
-                        stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                        stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
                     else:
-                        stop = self.buy(price = self.high + 1*self.atr, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                        stop = self.buy(price = self.high + 1*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
                     
                     self.sell_list.append(sell)
                     self.short_stop.append(stop.price)
                     self.min_dist.append(stop.price - sell.price)
-                    self.new_stoploss.append(sell.price)
+                    self.new_stoploss.append(self.low[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss amount on 1 BTC:', self.min_dist[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/sell.price)
                     print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:short signal: clos/kumo')
 
                     return
@@ -636,18 +745,18 @@ def backtest():
                     self.min_dist = []
                     self.new_stoploss = []
                     self.cancel_open_orders()
-                    sell = self.sell(price = self.low - self.p.h4_entry*self.atr, exectype = bt.Order.Stop, transmit=False)
+                    sell = self.sell(price = self.low - self.p.h4_entry*self.atr, size = size_, exectype = bt.Order.Stop, transmit=False)
                     if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
-                        stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                        stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
                     else:
-                        stop = self.buy(price = self.high + 1*self.atr, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                        stop = self.buy(price = self.high + 1*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
                     
                     self.sell_list.append(sell)
                     self.short_stop.append(stop.price)
                     self.min_dist.append(stop.price - sell.price)
-                    self.new_stoploss.append(sell.price)
+                    self.new_stoploss.append(self.low[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss amount on 1 BTC:', self.min_dist[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/sell.price)
                     print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:short signal: clos/kumo')
 
                     return
@@ -656,18 +765,18 @@ def backtest():
                     self.min_dist = []
                     self.new_stoploss = []
                     self.cancel_open_orders()
-                    sell = self.sell(price = self.low - self.p.h4_entry*self.atr, exectype = bt.Order.Stop, transmit=False)
+                    sell = self.sell(price = self.low - self.p.h4_entry*self.atr, size = size_, exectype = bt.Order.Stop, transmit=False)
                     if abs(entry_price - self.ichi.kijun_sen) > 4.8*self.atr:
-                        stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                        stop = self.buy(price = self.ichi.tenkan_sen + 1*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
                     else:
-                        stop = self.buy(price = self.ichi.kijun_sen + self.p.h4_stop*self.atr, exectype = bt.Order.Stop, parent = sell, transmit=True)
+                        stop = self.buy(price = self.ichi.kijun_sen + self.p.h4_stop*self.atr, size = sell.size, exectype = bt.Order.Stop, parent = sell, transmit=True)
                     
                     self.sell_list.append(sell)
                     self.short_stop.append(stop.price)
                     self.min_dist.append(stop.price - sell.price)
-                    self.new_stoploss.append(sell.price)
+                    self.new_stoploss.append(self.low[0])
 
-                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss amount on 1 BTC:', self.min_dist[0])
+                    print(bt.num2date(self.datas[0].datetime[0]), 'stoploss percent:', self.min_dist[0]/sell.price)
                     print(bt.num2date(self.datas[0].datetime[0]), 'tf:H4 side:short signal: kijun/kumo')
 
                     return
@@ -688,22 +797,8 @@ def backtest():
                 print(bt.num2date(self.datas[0].datetime[0]), 'close by trailing kumo')
 
 
-            #usual exit
-            # elif (self.getposition(self.data).size > 0) and (self.ichi.senkou_span_a < self.ichi.senkou_span_b) and (self.cross_clos_senkou_a == -1) and (len(self.exit) == 0):
-            #     self.cancel_open_orders()
-            #     exitloss = self.close(price = self.low - 1*self.atr, exectype = bt.Order.Stop)
-            #     self.exit.append(exitloss)
 
-            #     print(bt.num2date(self.datas[0].datetime[0]), 'close by kumo')
-
-            # elif (self.getposition(self.data).size > 0) and (self.ichi.senkou_span_a > self.ichi.senkou_span_b) and (self.cross_clos_senkou_b == -1) and (len(self.exit) == 0):
-            #     self.cancel_open_orders()
-            #     exitloss = self.close(price = self.low - 1*self.atr, exectype = bt.Order.Stop)
-            #     self.exit.append(exitloss)
-
-            #     print(bt.num2date(self.datas[0].datetime[0]), 'close by kumo')
-
-            elif (self.getposition(self.data).size > 0) and self.clos < (self.ichi_daily.kijun_sen - self.atr):
+            if (self.getposition(self.data).size > 0) and self.clos < (self.ichi_daily.kijun_sen - self.atr):
                 self.cancel_open_orders()
                 self.close()
                 # exitloss = self.close(price = self.low - 1*self.atr, exectype = bt.Order.Stop)
@@ -711,21 +806,8 @@ def backtest():
 
                 print(bt.num2date(self.datas[0].datetime[0]), 'close by dly kijun cross')
 
-            # elif (self.getposition(self.data).size < 0) and (self.ichi.senkou_span_a > self.ichi.senkou_span_b) and (self.cross_clos_senkou_a == +1) and (len(self.exit) == 0):
-            #     self.cancel_open_orders()
-            #     exitloss = self.close(price = self.high + 1*self.atr, exectype = bt.Order.Stop)
-            #     self.exit.append(exitloss)
 
-            #     print(bt.num2date(self.datas[0].datetime[0]), 'close by kumo')
-
-            # elif (self.getposition(self.data).size < 0) and (self.ichi.senkou_span_a < self.ichi.senkou_span_b) and (self.cross_clos_senkou_b == +1) and (len(self.exit) == 0):
-            #     self.cancel_open_orders()
-            #     exitloss = self.close(price = self.high + 1*self.atr, exectype = bt.Order.Stop)
-            #     self.exit.append(exitloss)
-
-            #     print(bt.num2date(self.datas[0].datetime[0]), 'close by kumo')
-
-            elif (self.getposition(self.data).size < 0) and self.clos > (self.ichi_daily.kijun_sen + self.atr):
+            if (self.getposition(self.data).size < 0) and self.clos > (self.ichi_daily.kijun_sen + self.atr):
                 self.cancel_open_orders()
                 self.close()
                 # exitloss = self.close(price = self.high + 1*self.atr, exectype = bt.Order.Stop)
@@ -776,8 +858,8 @@ def backtest():
     elif percent[0]: 
         cerebro.addsizer(bt.sizers.PercentSizer,percents = percent[1])  
 
-    cerebro.addanalyzer(trade_list, _name='trade_list')
-    # cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='TradeAnalyzer')
+    # cerebro.addanalyzer(trade_list, _name='trade_list')
+    cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='TradeAnalyzer')
     # cerebro.addanalyzer(bt.analyzers.SharpeRatio, 
     #                     timeframe       = bt.TimeFrame.Minutes, 
     #                     compression     = 24*60, 
@@ -790,7 +872,7 @@ def backtest():
 
     cerebroResponse = cerebro.run(tradehistory=True) #tradehistory=True)
     response        = cerebroResponse[0] 
-    trades_list     = response.analyzers.trade_list.get_analysis()
+    # trades_list     = response.analyzers.trade_list.get_analysis()
     
     if matPlotLib:
         cerebro.plot(style              = 'candlestick',
@@ -808,7 +890,7 @@ def backtest():
     endtime = datetime.datetime.now()
     print('Process time duration:',endtime-starttime)
 
-    return pd.DataFrame(trades_list)
+    # return pd.DataFrame(trades_list)
 
 
 if __name__ == '__main__':
